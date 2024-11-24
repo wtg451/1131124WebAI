@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MediaPipe 手部偵測</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            position: relative;
+            width: 1280px;
+            height: 720px;
+        }
+        #webcam {
+            transform: rotateY(180deg);
+            width: 1280px;
+            height: 720px;
+        }
+        #output_canvas {
+            position: absolute;
+            left: 0;
+            top: 0;
+            transform: rotateY(180deg);
+        }
+        #status {
+            position: absolute;
+            left: 10px;
+            top: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+        }
+        .back-to-index {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-family: Arial, sans-serif;
+            z-index: 9999;
+            transition: background-color 0.3s;
+        }
+        .back-to-index:hover {
+            background-color: rgba(0, 0, 0, 0.9);
+        }
+    </style>
+    <!-- MediaPipe 必要的函式庫 -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <!-- 加入 Matter.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+</head>
+<body>
+    <a href="index.html" class="back-to-index">🏠 回到首頁</a>
+    <div class="container">
+        <div id="status">系統狀態: 初始化中...</div>
+        <video id="webcam" autoplay playsinline></video>
+        <canvas id="output_canvas"></canvas>
+    </div>
+
+    <script type="module">
+        import {
+            HandLandmarker,
+            FilesetResolver
+        } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
+
+        const video = document.getElementById('webcam');
+        const canvasElement = document.getElementById('output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const statusDiv = document.getElementById('status');
+        
+        let handLandmarker = undefined;
+        let webcamRunning = false;
+        let lastVideoTime = -1;
+        let engine, render, world;
+        let handBodies = [];
+        let handConstraints = [];
+        let lastHandLandmarks = [];
+
+        // 更新狀態顯示
+        function updateStatus(message) {
+            statusDiv.textContent = `系統狀態: ${message}`;
+        }
+
+        // 顯示錯誤訊息
+        function showError(error) {
+            statusDiv.innerHTML = `錯誤: ${error}`;
+            statusDiv.style.backgroundColor = 'rgba(255,0,0,0.7)';
+        }
+
+        // 初始化 HandLandmarker
+        async function initializeHandLandmarker() {
+            try {
+                updateStatus("載入模型中...");
+                const vision = await FilesetResolver.forVisionTasks(
+                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
+                );
+                
+                handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                    baseOptions: {
+                        modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+                        delegate: "GPU"
+                    },
+                    runningMode: "VIDEO",
+                    numHands: 2
+                });
+                
+                updateStatus("模型載入完成，啟動攝影機...");
+                startCamera();
+            } catch (error) {
+                showError(error);
+            }
+        }
+
+        // 啟動攝影機
+        async function startCamera() {
+            try {
+                const constraints = {
+                    video: {
+                        width: 1280,
+                        height: 720
+                    }
+                };
+
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                video.addEventListener('loadeddata', predictWebcam);
+                webcamRunning = true;
+                updateStatus("系統運作中");
+            } catch (error) {
+                showError("無法存取攝影機: " + error.message);
+            }
+        }
+
+        // 初始化物理引擎
+        function initPhysics() {
+            engine = Engine.create();
+            world = engine.world;
+            
+            // 建立邊界
+            const walls = [
+                Bodies.rectangle(640, -10, 1280, 20, { isStatic: true }), // 上
+                Bodies.rectangle(640, 730, 1280, 20, { isStatic: true }), // 下
+                Bodies.rectangle(-10, 360, 20, 720, { isStatic: true }), // 左
+                Bodies.rectangle(1290, 360, 20, 720, { isStatic: true }) // 右
+            ];
+            Composite.add(world, walls);
+
+            // 產生隨機彩球，從100顆改為50顆
+            for (let i = 0; i < 50; i++) {
+                const size = Common.random(40, 60);
+                const ball = Bodies.circle(
+                    Common.random(100, 1180),
+                    Common.random(100, 620),
+                    size/2,
+                    {
+                        render: {
+                            fillStyle: `hsl(${Common.random(0, 360)}, 100%, 50%)`
+                        }
+                    }
+                );
+                Composite.add(world, ball);
+            }
+
+            Engine.run(engine);
+        }
+
+        // 預測與繪製
+        async function predictWebcam() {
+            canvasElement.style.width = video.videoWidth;
+            canvasElement.style.height = video.videoHeight;
+            canvasElement.width = video.videoWidth;
+            canvasElement.height = video.videoHeight;
+
+            // 繪製攝影機畫面作為背景
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+
+            if (lastVideoTime !== video.currentTime) {
+                lastVideoTime = video.currentTime;
+                const startTimeMs = performance.now();
+                const results = handLandmarker.detectForVideo(video, startTimeMs);
+
+                // 更新手部位置
+                if (results.landmarks && results.landmarks.length > 0) {
+                    lastHandLandmarks = results.landmarks;
+                }
+
+                // 清除舊的手部物理物件
+                handBodies.forEach(body => Composite.remove(world, body));
+                handConstraints.forEach(constraint => Composite.remove(world, constraint));
+                handBodies = [];
+                handConstraints = [];
+
+                // 使用最後一次成功的辨識結果
+                if (lastHandLandmarks.length > 0) {
+                    for (const landmarks of lastHandLandmarks) {
+                        // 為每個手部節點建立物理物件
+                        const body = Bodies.circle(
+                            landmark.x * canvasElement.width,
+                            landmark.y * canvasElement.height,
+                            10,
+                            {
+                                render: {
+                                    fillStyle: `hsl(${Common.random(0, 360)}, 100%, 50%)`
+                                }
+                            }
+                        );
+                        Composite.add(world, body);
+                        handBodies.push(body);
+
+                        // 為每個手部節點建立物理約束
+                        if (landmarks.length > 1) {
+                            const constraint = Constraint.create({
+                                bodyA: body,
+                                pointA: { x: 0, y: 0 },
+                                bodyB: world.bodies[0],
+                                pointB: { x: 0, y: 0 },
+                                length: 0,
+                                stiffness: 0.1
+                            });
+                            Composite.add(world, constraint);
+                            handConstraints.push(constraint);
+                        }
+                    }
+                }
+            }
+
+            canvasCtx.restore();
+
+            if (webcamRunning) {
+                window.requestAnimationFrame(predictWebcam);
+            }
+        }
+
+        // 當頁面載入完成後開始初始化
+        window.onload = initializeHandLandmarker;
+    </script>
+</body>
+</html>

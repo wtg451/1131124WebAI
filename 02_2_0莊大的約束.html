@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>物理約束示範</title>
+    <style>
+        canvas {
+            border: 1px solid #000;
+        }
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        .back-to-index {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-family: Arial, sans-serif;
+            z-index: 9999;
+            transition: background-color 0.3s;
+        }
+        .back-to-index:hover {
+            background-color: rgba(0, 0, 0, 0.9);
+        }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="back-to-index">🏠 回到首頁</a>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <script>
+        // Matter.js 模組別名
+        const Engine = Matter.Engine,
+            Render = Matter.Render,
+            Runner = Matter.Runner,
+            Bodies = Matter.Bodies,
+            Composite = Matter.Composite,
+            Constraint = Matter.Constraint,
+            MouseConstraint = Matter.MouseConstraint,
+            Mouse = Matter.Mouse;
+
+        // 建立引擎
+        const engine = Engine.create();
+        const world = engine.world;
+
+        // 建立渲染器
+        const render = Render.create({
+            element: document.body,
+            engine: engine,
+            options: {
+                width: window.innerWidth,
+                height: window.innerHeight,
+                wireframes: false
+            }
+        });
+
+        // 建立兩個方形（彈性約束）
+        const box1 = Bodies.rectangle(300, 300, 50, 50, {
+            render: { 
+                fillStyle: '#F0A500'  // 橙色
+            }
+        });
+        const box2 = Bodies.rectangle(400, 300, 50, 50, {
+            render: { 
+                fillStyle: '#F0A500'  // 橙色
+            }
+        });
+
+        // 彈性約束（兩方形之間）
+        const elastic1 = Constraint.create({
+            bodyA: box1,
+            bodyB: box2,
+            stiffness: 0.01,  // 彈性係數
+            damping: 0.1,     // 阻尼
+            length: 100,      // 原始長度
+            render: {
+                visible: true,
+                strokeStyle: '#4A4A4A',
+                lineWidth: 5
+            }
+        });
+
+        // 建立圓球和固定點（彈性約束）
+        const circle1 = Bodies.circle(500, 300, 30);
+        const elastic2 = Constraint.create({
+            pointA: { x: 500, y: 100 },
+            bodyB: circle1,
+            stiffness: 0.01,
+            damping: 0.1,     // 阻尼
+            length: 200,      // 原始長度
+        });
+
+        // 建立兩個圓（剛性約束）
+        const bigCircle = Bodies.circle(700, 300, 50);
+        const smallCircle = Bodies.circle(700, 500, 25);
+
+        // 剛性約束（兩圓之間）
+        const rigid1 = Constraint.create({
+            bodyA: bigCircle,
+            bodyB: smallCircle,
+            length: 200,
+            stiffness: 1
+        });
+
+        // 建立圓球和固定點（剛性約束）
+        const circle2 = Bodies.circle(900, 300, 30);
+        const rigid2 = Constraint.create({
+            pointA: { x: 900, y: 100 },
+            bodyB: circle2,
+            stiffness: 0.01
+        });
+
+        // 建立邊界
+        const ground = Bodies.rectangle(window.innerWidth/2, window.innerHeight, window.innerWidth, 20, {
+            isStatic: true
+        });
+
+        // 建立方塊塔
+        const stackColumns = 2;
+        const stackRows = 10;
+        const stackX = window.innerWidth - 100;
+        const stackY = window.innerHeight - 30;
+        
+        // 隨機顏色函數
+        function getRandomColor() {
+            const colors = [
+                '#FF6B6B', // 紅
+                '#4ECDC4', // 青
+                '#45B7D1', // 藍
+                '#96CEB4', // 綠
+                '#FFEEAD', // 黃
+                '#D4A5A5', // 粉
+                '#9B59B6', // 紫
+                '#E67E22'  // 橙
+            ];
+            return colors[Math.floor(Math.random() * colors.length)];
+        }
+
+        // 隨機尺寸函數
+        function getRandomSize() {
+            return {
+                width: Math.random() * 20 + 15,  // 15-35之間的寬度
+                height: Math.random() * 30 + 30  // 30-60之間的高度
+            };
+        }
+        
+        for(let row = 0; row < stackRows; row++) {
+            for(let col = 0; col < stackColumns; col++) {
+                const size = getRandomSize();
+                const block = Bodies.rectangle(
+                    stackX + col * 35,  // 增加間距避免重疊
+                    stackY - row * 65,  // 增加間距避免重疊
+                    size.width,
+                    size.height,
+                    {
+                        render: {
+                            fillStyle: getRandomColor()
+                        }
+                    }
+                );
+                Composite.add(world, block);
+            }
+        }
+
+        // 加入滑鼠控制
+        const mouse = Mouse.create(render.canvas);
+        const mouseConstraint = MouseConstraint.create(engine, {
+            mouse: mouse,
+            constraint: {
+                stiffness: 0.2,
+                render: {
+                    visible: false
+                }
+            }
+        });
+        Composite.add(world, mouseConstraint);
+
+        // 必須加入這行才能讓滑鼠事件正常運作
+        render.mouse = mouse;
+
+        // 將所有物體添加到世界中
+        Composite.add(world, [box1, box2, circle1, bigCircle, smallCircle, circle2, ground]);
+
+        // 將約束添加到世界中
+        Composite.add(world, [elastic1, elastic2, rigid1, rigid2]);
+
+        // 建立 Runner
+        const runner = Runner.create();
+        Runner.run(runner, engine);
+
+        // 運行渲染器
+        Render.run(render);
+    </script>
+</body>
+</html>

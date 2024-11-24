@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>物理物體生成器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        #stats {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial;
+            font-size: 16px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .back-to-index {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-family: Arial, sans-serif;
+            z-index: 9999;
+            transition: background-color 0.3s;
+        }
+        .back-to-index:hover {
+            background-color: rgba(0, 0, 0, 0.9);
+        }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="back-to-index">🏠 回到首頁</a>
+    <div id="stats">物體數量: 0 | FPS: 0</div>
+    <script>
+        const Engine = Matter.Engine,
+            Render = Matter.Render,
+            Runner = Matter.Runner,
+            Bodies = Matter.Bodies,
+            Composite = Matter.Composite,
+            Mouse = Matter.Mouse,
+            World = Matter.World;
+
+        // 創建引擎
+        const engine = Engine.create();
+        
+        // 創建渲染器
+        const render = Render.create({
+            element: document.body,
+            engine: engine,
+            options: {
+                width: window.innerWidth,
+                height: window.innerHeight,
+                wireframes: false
+            }
+        });
+
+        // 創建邊界
+        const walls = [
+            Bodies.rectangle(window.innerWidth/2, 0, window.innerWidth, 60, { isStatic: true }),
+            Bodies.rectangle(window.innerWidth/2, window.innerHeight, window.innerWidth, 60, { isStatic: true }),
+            Bodies.rectangle(0, window.innerHeight/2, 60, window.innerHeight, { isStatic: true }),
+            Bodies.rectangle(window.innerWidth, window.innerHeight/2, 60, window.innerHeight, { isStatic: true })
+        ];
+        World.add(engine.world, walls);
+
+        // 開始渲染和運行
+        Render.run(render);
+        const runner = Runner.create();
+        Runner.run(runner, engine);
+
+        // FPS計算
+        let frameCount = 0;
+
+        // 新增隨機形狀生成函數
+        function createRandomBody(x, y) {
+            const size = Math.random() * 30 + 20; // 20~50px
+            const shapes = ['rectangle', 'circle', 'polygon', 'trapezoid'];
+            const shape = shapes[Math.floor(Math.random() * shapes.length)];
+            
+            // 隨機生成明亮的顏色
+            const hue = Math.random() * 360;
+            const color = `hsl(${hue}, 80%, 60%)`;
+            
+            let body;
+            switch(shape) {
+                case 'rectangle':
+                    body = Bodies.rectangle(x, y, size, size, {
+                        render: { fillStyle: color }
+                    });
+                    break;
+                case 'circle':
+                    body = Bodies.circle(x, y, size/2, {
+                        render: { fillStyle: color }
+                    });
+                    break;
+                case 'polygon':
+                    body = Bodies.polygon(x, y, Math.floor(Math.random() * 3) + 3, size/2, {
+                        render: { fillStyle: color }
+                    });
+                    break;
+                case 'trapezoid':
+                    body = Bodies.trapezoid(x, y, size, size, 0.5, {
+                        render: { fillStyle: color }
+                    });
+                    break;
+            }
+            return body;
+        }
+
+        // 新增 FPS 計算
+        let fps = 0;
+        let lastTime = performance.now();
+        function updateFPS() {
+            const currentTime = performance.now();
+            fps = Math.round(1000 / (currentTime - lastTime));
+            lastTime = currentTime;
+        }
+
+        // 修改滑鼠事件處理
+        let isMouseDown = false;
+        let spawnInterval;
+
+        document.addEventListener('mousedown', (e) => {
+            isMouseDown = true;
+            spawnInterval = setInterval(() => {
+                for(let i = 0; i < 1; i++) { // 每幀生成1個，每秒約10個
+                    const body = createRandomBody(e.clientX, e.clientY);
+                    World.add(engine.world, body);
+                }
+            }, 100);
+        });
+
+        document.addEventListener('mouseup', () => {
+            isMouseDown = false;
+            clearInterval(spawnInterval);
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isMouseDown) {
+                const body = createRandomBody(e.clientX, e.clientY);
+                World.add(engine.world, body);
+            }
+        });
+
+        // 新增滑鼠右鍵事件處理
+        document.addEventListener('contextmenu', (e) => {
+            e.preventDefault(); // 防止出現右鍵選單
+            
+            // 獲取滑鼠位置附近的物體
+            const bodies = Composite.allBodies(engine.world);
+            const mousePosition = { x: e.clientX, y: e.clientY };
+            
+            // 遍歷所有物體，刪除距離滑鼠50像素內的物體
+            bodies.forEach(body => {
+                // 跳過邊界牆壁（靜態物體）
+                if (body.isStatic) return;
+                
+                const distance = Math.sqrt(
+                    Math.pow(body.position.x - mousePosition.x, 2) + 
+                    Math.pow(body.position.y - mousePosition.y, 2)
+                );
+                
+                if (distance < 50) {
+                    World.remove(engine.world, body);
+                }
+            });
+        });
+
+        // 更新統計資訊
+        function updateStats() {
+            updateFPS();
+            const bodyCount = Composite.allBodies(engine.world).length - 4; // 減去4個邊界
+            document.getElementById('stats').textContent = 
+                `物體數量: ${bodyCount} | FPS: ${fps}`;
+            requestAnimationFrame(updateStats);
+        }
+
+        updateStats();
+    </script>
+</body>
+</html>

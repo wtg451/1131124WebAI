@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>莊大的Emoji選擇器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        .emoji-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 10px;
+            padding: 20px;
+        }
+        .emoji-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px;
+            background-color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .emoji-item:hover {
+            transform: scale(1.1);
+            background-color: #e0e0e0;
+        }
+        .emoji {
+            font-size: 2em;
+        }
+        .code {
+            font-size: 0.8em;
+            color: #666;
+            margin-top: 5px;
+        }
+        .back-to-index {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-family: Arial, sans-serif;
+            z-index: 9999;
+            transition: background-color 0.3s;
+        }
+        .back-to-index:hover {
+            background-color: rgba(0, 0, 0, 0.9);
+        }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="back-to-index">🏠 回到首頁</a>
+    <h1>莊大的Emoji選擇器</h1>
+    <div class="emoji-container" id="emojiContainer"></div>
+
+    <script>
+        function createEmojiGrid() {
+            const container = document.getElementById('emojiContainer');
+            
+            // 生成大範圍的emoji（從0x1F300到0x1F9FF）
+            for (let i = 0x1F300; i <= 0x1F9FF; i++) {
+                try {
+                    const emoji = String.fromCodePoint(i);
+                    const div = document.createElement('div');
+                    div.className = 'emoji-item';
+                    
+                    // 創建emoji顯示區
+                    const emojiSpan = document.createElement('span');
+                    emojiSpan.className = 'emoji';
+                    emojiSpan.textContent = emoji;
+                    
+                    // 創建編碼顯示區
+                    const codeSpan = document.createElement('span');
+                    codeSpan.className = 'code';
+                    codeSpan.textContent = 'U+' + i.toString(16).toUpperCase();
+                    
+                    div.appendChild(emojiSpan);
+                    div.appendChild(codeSpan);
+                    
+                    // 添加點擊複製功能
+                    div.onclick = async function() {
+                        try {
+                            await navigator.clipboard.writeText(emoji);
+                            alert('複製成功：' + emoji);
+                        } catch (error) {
+                            console.error('複製失敗：', error);
+                        }
+                    };
+                    
+                    container.appendChild(div);
+                } catch (error) {
+                    console.error('無法顯示emoji：', error);
+                }
+            }
+        }
+        
+        createEmojiGrid();
+    </script>
+</body>
+</html>

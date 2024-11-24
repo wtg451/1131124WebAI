@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>月亮動畫</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0a0a2a;
+            cursor: none;
+        }
+
+        .star {
+            position: absolute;
+            color: white;
+            opacity: 0;
+            transition: opacity 1s;
+        }
+
+        #earth {
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 300px;
+            z-index: 1;
+        }
+
+        #moon {
+            position: fixed;
+            width: 100px;
+            height: 100px;
+            pointer-events: none;
+            transition: transform 0.1s, z-index 0.1s;
+        }
+
+        #moonRover {
+            position: fixed;
+            width: 100px;
+            height: 100px;
+            z-index: 1;
+            left: 50%;
+            top: 50%;
+            transform-origin: center;
+            animation: orbitEarth 20s linear infinite;
+        }
+
+        @keyframes orbitEarth {
+            from {
+                transform: translate(-50%, -50%) rotate(0deg) translateX(200px) rotate(0deg);
+            }
+            to {
+                transform: translate(-50%, -50%) rotate(-360deg) translateX(200px) rotate(360deg);
+            }
+        }
+
+        .slider-container {
+            position: fixed;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: white;
+        }
+
+        .slider-container input {
+            width: 200px;
+            cursor: pointer;
+        }
+
+        .back-to-index {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-family: Arial, sans-serif;
+            z-index: 9999;
+            transition: background-color 0.3s;
+        }
+        .back-to-index:hover {
+            background-color: rgba(0, 0, 0, 0.9);
+        }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="back-to-index">🏠 回到首頁</a>
+    <div class="slider-container">
+        <span>🌑</span>
+        <input type="range" id="brightnessSlider" min="0" max="100" value="20">
+        <span>🌕</span>
+    </div>
+    <div id="earth">🌍</div>
+    <img id="moonRover" src="./image/moon1.png" alt="moon">
+    <img id="moon" src="./image/robot.png" alt="robot">
+    <div id="musicHint" style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); color: white; font-size: 20px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">
+        點擊畫面播放音樂 🎵
+    </div>
+    <audio id="bgMusic" loop>
+        <source src="./music/追風的午後.mp3" type="audio/mp3">
+    </audio>
+
+    <script>
+        const moon = document.getElementById('moon');
+        const earth = document.getElementById('earth');
+        const earthPhases = ['🌍', '🌎', '🌏'];
+        let currentEarthPhase = 0;
+        let lastX = 0;
+
+        // 滑鼠追蹤
+        document.addEventListener('mousemove', (e) => {
+            const currentX = e.clientX;
+            if (currentX > lastX) {
+                moon.style.zIndex = 0;
+            } else {
+                moon.style.zIndex = 2;
+            }
+            lastX = currentX;
+
+            moon.style.left = e.clientX - 50 + 'px';
+            moon.style.top = e.clientY - 50 + 'px';
+        });
+
+        // 地球動畫
+        setInterval(() => {
+            currentEarthPhase = (currentEarthPhase + 1) % earthPhases.length;
+            earth.textContent = earthPhases[currentEarthPhase];
+        }, 1000);  // 每秒切換一次地球
+
+        // 產生星星
+        function createStar() {
+            const star = document.createElement('div');
+            star.className = 'star';
+            star.style.left = Math.random() * window.innerWidth + 'px';
+            star.style.top = Math.random() * window.innerHeight + 'px';
+            star.textContent = '⭐';
+            star.style.fontSize = Math.random() * 10 + 5 + 'px';
+            document.body.appendChild(star);
+
+            // 星星閃爍動畫
+            setInterval(() => {
+                star.style.opacity = Math.random();
+            }, Math.random() * 3000 + 1000);
+        }
+
+        // 始化100顆星星
+        for (let i = 0; i < 100; i++) {
+            createStar();
+        }
+
+        // 新增音樂控制
+        const bgMusic = document.getElementById('bgMusic');
+        const musicHint = document.getElementById('musicHint');
+        let isFirstClick = true;
+
+        document.addEventListener('click', () => {
+            if (isFirstClick) {
+                bgMusic.play().catch(error => {
+                    console.log("音樂播放失敗:", error);
+                });
+                musicHint.style.display = 'none';
+                isFirstClick = false;
+            }
+        });
+
+        // 背景亮度控制
+        const brightnessSlider = document.getElementById('brightnessSlider');
+        
+        brightnessSlider.addEventListener('input', (e) => {
+            const brightness = e.target.value;
+            // 將 0-100 的值轉換為 0.1-0.5 的範圍
+            const bgBrightness = (brightness / 100 * 0.4 + 0.1).toFixed(2);
+            document.body.style.backgroundColor = `rgba(10, 10, 42, ${bgBrightness})`;
+        });
+
+        const moonRover = document.getElementById('moonRover');
+        const moonImages = [
+            './image/moon1.png',
+            './image/moon2.png',
+            './image/moon3.png'
+        ];
+        let currentMoonPhase = 0;
+
+        // 月相變化動畫
+        setInterval(() => {
+            currentMoonPhase = (currentMoonPhase + 1) % moonImages.length;
+            moonRover.src = moonImages[currentMoonPhase];
+        }, 333);  // 每 333 毫秒變換一次（約每秒 3 張）
+    </script>
+</body>
+</html>

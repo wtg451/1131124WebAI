@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>簡易人臉偵測</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            position: relative;
+        }
+        #webcam, #output_canvas {
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+        #status {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1000;
+        }
+        #webcam {
+            transform: rotateY(180deg);
+            -webkit-transform: rotateY(180deg);
+        }
+        #output_canvas {
+            transform: rotateY(180deg);
+            -webkit-transform: rotateY(180deg);
+        }
+        .egg-emoji {
+            position: absolute;
+            font-size: 150px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+        .back-to-index {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-family: Arial, sans-serif;
+            z-index: 9999;
+            transition: background-color 0.3s;
+        }
+        .back-to-index:hover {
+            background-color: rgba(0, 0, 0, 0.9);
+        }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="back-to-index">🏠 回到首頁</a>
+    <div id="status">系統狀態: 初始化中...</div>
+    <div class="container">
+        <video id="webcam" style="display: none" autoplay></video>
+        <canvas id="output_canvas"></canvas>
+    </div>
+
+    <script type="module">
+        import vision from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+        const { FaceLandmarker, FilesetResolver, DrawingUtils } = vision;
+        
+        const video = document.getElementById('webcam');
+        const canvasElement = document.getElementById('output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const statusElement = document.getElementById('status');
+        
+        let faceLandmarker;
+        let runningMode = "VIDEO";
+        let lastVideoTime = -1;
+        let results = undefined;
+        
+        // 設定視訊大小
+        const WIDTH = 1280;
+        const HEIGHT = 720;
+        
+        // 新增星星粒子系統
+        const particles = [];
+        const emojis = ["⭐", "💫", "✨", "🌟", "⚡", "💥", "🎇", "🎆", "🌠", "🔥"];
+        
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2 + Math.random() * 5;
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                this.alpha = 1;
+                this.gravity = 0.3;
+                this.emoji = emojis[Math.floor(Math.random() * emojis.length)];
+            }
+            
+            update() {
+                this.x += this.vx;
+                this.vy += this.gravity;
+                this.y += this.vy;
+                this.alpha -= 0.02;
+                return this.alpha > 0;
+            }
+        }
+        
+        async function initializeFaceLandmarker() {
+            try {
+                statusElement.textContent = "系統狀態: 載入模型中...";
+                
+                const filesetResolver = await FilesetResolver.forVisionTasks(
+                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+                );
+                
+                faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+                    baseOptions: {
+                        modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+                        delegate: "GPU"
+                    },
+                    outputFaceBlendshapes: true,
+                    runningMode,
+                    numFaces: 1
+                });
+                
+                statusElement.textContent = "系統狀態: 模型載入完成，啟動攝影機...";
+                startCamera();
+            } catch (error) {
+                statusElement.textContent = `錯誤: ${error.message}`;
+                console.error(error);
+            }
+        }
+        
+        async function startCamera() {
+            try {
+                const constraints = {
+                    video: {
+                        width: WIDTH,
+                        height: HEIGHT
+                    }
+                };
+                
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                video.addEventListener('loadeddata', predictWebcam);
+                
+                // 設定 canvas 大小
+                canvasElement.width = WIDTH;
+                canvasElement.height = HEIGHT;
+                
+                statusElement.textContent = "系統狀態: 運作中";
+                video.style.display = "block";
+            } catch (error) {
+                statusElement.textContent = `錯誤: 無法存取攝影機 - ${error.message}`;
+                console.error(error);
+            }
+        }
+        
+        const drawingUtils = new DrawingUtils(canvasCtx);
+        
+        async function predictWebcam() {
+            try {
+                if (lastVideoTime !== video.currentTime) {
+                    lastVideoTime = video.currentTime;
+                    results = faceLandmarker.detectForVideo(video, performance.now());
+                }
+                
+                canvasCtx.clearRect(0, 0, WIDTH, HEIGHT);
+                
+                if (results.faceLandmarks) {
+                    for (const landmarks of results.faceLandmarks) {
+                        // 不繪製網格，移除 drawConnectors 相關程式碼
+                        
+                        // 繪製煎蛋眼睛
+                        const leftEye = {
+                            x: landmarks[159].x * WIDTH,
+                            y: landmarks[159].y * HEIGHT
+                        };
+                        const rightEye = {
+                            x: landmarks[386].x * WIDTH,
+                            y: landmarks[386].y * HEIGHT
+                        };
+                        
+                        // 繪製煎蛋 emoji
+                        canvasCtx.font = "150px Arial";
+                        canvasCtx.textAlign = "center";
+                        canvasCtx.textBaseline = "middle";
+                        canvasCtx.fillText("🍳", leftEye.x, leftEye.y);
+                        canvasCtx.fillText("🍳", rightEye.x, rightEye.y);
+                        
+                        // 檢測嘴巴是否張開
+                        const upperLip = landmarks[13];
+                        const lowerLip = landmarks[14];
+                        const mouthOpen = Math.abs(upperLip.y - lowerLip.y) > 0.05;
+                        
+                        // 如果嘴巴張開，產生星星
+                        if (mouthOpen && Math.random() < 0.33) { // 每幀約33%機率產生星星，60幀下約每秒20顆
+                            const mouthCenter = {
+                                x: ((landmarks[13].x + landmarks[14].x) / 2) * WIDTH,
+                                y: ((landmarks[13].y + landmarks[14].y) / 2) * HEIGHT
+                            };
+                            // 在嘴巴中心位置產生星星
+                            particles.push(new Particle(mouthCenter.x, mouthCenter.y));
+                        }
+                        
+                        // 修改繪製星星的部分
+                        for (let i = particles.length - 1; i >= 0; i--) {
+                            if (particles[i].update()) {
+                                canvasCtx.save();
+                                canvasCtx.globalAlpha = particles[i].alpha;
+                                canvasCtx.font = "25px Arial"; // 調整大小
+                                canvasCtx.textAlign = "center";
+                                canvasCtx.textBaseline = "middle";
+                                // 使用粒子的隨機圖案
+                                canvasCtx.fillText(particles[i].emoji, particles[i].x, particles[i].y);
+                                canvasCtx.restore();
+                            } else {
+                                particles.splice(i, 1);
+                            }
+                        }
+                    }
+                }
+                
+                // 持續執行偵測
+                window.requestAnimationFrame(predictWebcam);
+            } catch (error) {
+                statusElement.textContent = `錯誤: ${error.message}`;
+                console.error(error);
+            }
+        }
+        
+        // 確保在視訊載入後開始追蹤
+        video.addEventListener('loadeddata', () => {
+            predictWebcam();
+        });
+        
+        // 啟動系統
+        initializeFaceLandmarker();
+    </script>
+</body>
+</html>

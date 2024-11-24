@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>物理物體生成器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        #stats {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial;
+            font-size: 16px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #emojiCanvas {
+            display: none;  /* 使用正確的 CSS 註解語法 */
+        }
+        .back-to-index {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-family: Arial, sans-serif;
+            z-index: 9999;
+            transition: background-color 0.3s;
+        }
+        .back-to-index:hover {
+            background-color: rgba(0, 0, 0, 0.9);
+        }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="back-to-index">🏠 回到首頁</a>
+    <canvas id="emojiCanvas" width="40" height="40"></canvas>
+    <div id="stats">物體數量: 0 | FPS: 0</div>
+    <script>
+        const Engine = Matter.Engine,
+            Render = Matter.Render,
+            Runner = Matter.Runner,
+            Bodies = Matter.Bodies,
+            Composite = Matter.Composite,
+            Mouse = Matter.Mouse,
+            World = Matter.World,
+            MouseConstraint = Matter.MouseConstraint,
+            Constraint = Matter.Constraint,
+            Events = Matter.Events;
+
+        // 創建引擎
+        const engine = Engine.create();
+        
+        // 創建渲染器
+        const render = Render.create({
+            element: document.body,
+            engine: engine,
+            options: {
+                width: window.innerWidth,
+                height: window.innerHeight,
+                wireframes: false
+            }
+        });
+
+        // 創建滑鼠控制
+        const mouse = Mouse.create(render.canvas);
+        const mouseConstraint = MouseConstraint.create(engine, {
+            mouse: mouse,
+            constraint: {
+                stiffness: 0.2,
+                render: {
+                    visible: false
+                }
+            }
+        });
+
+        World.add(engine.world, mouseConstraint);
+        render.mouse = mouse;
+
+        // 創建邊界
+        const walls = [
+            Bodies.rectangle(window.innerWidth/2, 0, window.innerWidth, 60, { isStatic: true }),
+            Bodies.rectangle(window.innerWidth/2, window.innerHeight, window.innerWidth, 60, { isStatic: true }),
+            Bodies.rectangle(0, window.innerHeight/2, 60, window.innerHeight, { isStatic: true }),
+            Bodies.rectangle(window.innerWidth, window.innerHeight/2, 60, window.innerHeight, { isStatic: true })
+        ];
+        World.add(engine.world, walls);
+
+        // 開始渲染和運行
+        Render.run(render);
+        const runner = Runner.create();
+        Runner.run(runner, engine);
+
+        // FPS計算
+        let frameCount = 0;
+
+        // 新增隨機形狀生成函數
+        function createRandomBody(x, y) {
+            const size = Math.random() * 30 + 20;
+            const emojis = ['🎈', '⚽', '🎱', '🌟', '🍎', '🎮', '🎲', '🎯'];
+            const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+            const texture = createEmojiTexture(emoji);
+            
+            let body;
+            const options = {
+                render: {
+                    sprite: {
+                        texture: texture,
+                        xScale: size/40,
+                        yScale: size/40
+                    }
+                }
+            };
+            
+            // 根據不同emoji選擇不同形狀
+            if (emoji === '⚽' || emoji === '🎱') {
+                body = Bodies.circle(x, y, size/2, options);
+            } else {
+                body = Bodies.rectangle(x, y, size, size, options);
+            }
+            
+            return body;
+        }
+
+        // 新增 FPS 計算
+        let fps = 0;
+        let lastTime = performance.now();
+        function updateFPS() {
+            const currentTime = performance.now();
+            fps = Math.round(1000 / (currentTime - lastTime));
+            lastTime = currentTime;
+        }
+
+        // 修改滑鼠事件處理和碰撞檢測部分
+        let selectedBody = null;
+        let isMouseDown = false;
+        let spawnInterval;
+        let isHolding = false; // 新增：追蹤是否正在按住物體
+
+        document.addEventListener('mousedown', (e) => {
+            // 檢查是否點擊到物體
+            const bodies = Composite.allBodies(engine.world);
+            const mousePosition = { x: e.clientX, y: e.clientY };
+
+            bodies.forEach(body => {
+                if (body.isStatic) return;
+                const distance = Math.sqrt(
+                    Math.pow(body.position.x - mousePosition.x, 2) + 
+                    Math.pow(body.position.y - mousePosition.y, 2)
+                );
+                
+                if (distance < 50) {
+                    selectedBody = body;
+                    isHolding = true; // 新增：設置按住狀態
+                    body.render.fillStyle = '#ff0000';
+                    return;
+                }
+            });
+
+            // 如果點擊空白處且沒有選中的物體，生成新物體
+            if (!selectedBody) {
+                isMouseDown = true;
+                spawnInterval = setInterval(() => {
+                    for(let i = 0; i < 1; i++) {
+                        const body = createRandomBody(e.clientX, e.clientY);
+                        World.add(engine.world, body);
+                    }
+                }, 100);
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (selectedBody) {
+                selectedBody.render.fillStyle = `hsl(${Math.random() * 360}, 80%, 60%)`;
+                isHolding = false; // 新增：釋放按住狀態
+                selectedBody = null;
+            }
+            isMouseDown = false;
+            clearInterval(spawnInterval);
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isMouseDown) {
+                const body = createRandomBody(e.clientX, e.clientY);
+                World.add(engine.world, body);
+            }
+        });
+
+        // 修改碰撞檢測事件
+        Events.on(engine, 'collisionStart', (event) => {
+            if (!isHolding) return; // 修改：只在按住物體時處理碰撞
+
+            event.pairs.forEach((pair) => {
+                if (pair.bodyA === selectedBody) {
+                    World.remove(engine.world, pair.bodyB);
+                } else if (pair.bodyB === selectedBody) {
+                    World.remove(engine.world, pair.bodyA);
+                }
+            });
+        });
+
+        function createEmojiTexture(emoji) {
+            const canvas = document.getElementById('emojiCanvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.font = '30px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(emoji, canvas.width/2, canvas.height/2);
+            
+            return canvas.toDataURL();
+        }
+    </script>
+</body>
+</html>
